@@ -149,6 +149,19 @@ export async function POST(request) {
     }
 
     if (mode === 'create') {
+      // Process knowledge files first
+      let projectKnowledge = '';
+      if (knowledgeFiles && knowledgeFiles.length > 0) {
+        projectKnowledge = await Promise.all(knowledgeFiles.map(async (file) => {
+          if (file.type.startsWith('text/')) {
+            const content = await file.text();
+            return `Knowledge File: ${file.name}\n${content}\n---\n`;
+          }
+          return `Knowledge File: ${file.name} (Binary file)\n---\n`;
+        }));
+        projectKnowledge = projectKnowledge.join('\n');
+      }
+
       const response = await anthropic.messages.create({
         model: 'claude-3-opus-20240229',
         max_tokens: 4000,
@@ -159,6 +172,9 @@ export async function POST(request) {
             
             Project Description: ${prompt}
             Additional Context: ${knowledge}
+
+            Project Knowledge Files:
+            ${projectKnowledge}
             
             Please provide a complete project structure with all necessary files and their contents.
             Use this format for each file:
@@ -194,7 +210,12 @@ export async function POST(request) {
         body: JSON.stringify({
           prompt,
           response: output,
-          mode: 'create'
+          mode: 'create',
+          knowledgeFiles: knowledgeFiles.length > 0 ? await Promise.all(knowledgeFiles.map(async file => ({
+            name: file.name,
+            content: file.type.startsWith('text/') ? await file.text() : null,
+            type: file.type
+          }))) : []
         })
       });
 
@@ -259,9 +280,10 @@ export async function POST(request) {
     file content here
     === END FILE ===`;
 
-    // Enhanced AI error handling
+    // Enhanced AI error handling - Simpan response dalam variabel
+    let response;
     try {
-      const response = await anthropic.messages.create({
+      response = await anthropic.messages.create({
         model: 'claude-3-opus-20240229',
         max_tokens: 4000,
         system: systemPrompt, // Move system prompt to top-level parameter

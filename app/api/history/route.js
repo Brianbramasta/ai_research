@@ -24,13 +24,17 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { prompt, response } = await request.json();
+    const data = await request.json();
     const history = JSON.parse(await fs.readFile(historyPath, 'utf8'));
     
     history.messages.push({
       created_at: new Date().toISOString(),
-      prompt,
-      response,
+      mode: data.mode,
+      prompt: data.prompt,
+      response: data.response,
+      files: data.files || [],
+      knowledgeFiles: data.knowledgeFiles || [],
+      originalFiles: data.originalFiles || []
     });
 
     // Keep only last 50 messages

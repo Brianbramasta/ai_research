@@ -120,11 +120,12 @@ export default function Home() {
     }
 
     const fileContents = await Promise.all(validFiles.map(async (file) => {
-      if (file.type.startsWith('text/')) {
-        return { file, content: await file.text() };
-      }
-      // For non-text files, we'll just store the file object
-      return { file, content: null };
+      return { 
+        file,
+        // Jangan baca content di sini, biarkan handling di API
+        content: null,
+        type: file.type 
+      };
     }));
 
     setKnowledgeFiles([...knowledgeFiles, ...fileContents]);
@@ -146,8 +147,10 @@ export default function Home() {
         files.forEach(file => {
           formData.append('files', file.content, file.path);
         });
-        // Add knowledge files to formData
+
+        // Perbaikan untuk knowledge files
         knowledgeFiles.forEach(kf => {
+          // Pastikan mengirim file asli, bukan object
           formData.append('knowledgeFiles', kf.file);
         });
       }
@@ -354,6 +357,19 @@ export default function Home() {
     setPrompt(item.prompt);
     setMode(item.mode);
 
+    // Restore files and knowledge files if they exist
+    if (item.files) {
+      await restoreFilesFromHistory(item.files);
+    }
+    if (item.knowledgeFiles) {
+      const restoredKnowledgeFiles = item.knowledgeFiles.map(kf => ({
+        file: new File([kf.content || ''], kf.name, { type: kf.type }),
+        content: null,
+        type: kf.type
+      }));
+      setKnowledgeFiles(restoredKnowledgeFiles);
+    }
+
     switch (item.mode) {
       case 'create':
         const files = [];
@@ -378,7 +394,7 @@ export default function Home() {
         break;
 
       case 'code':
-        const { changes, zipData, originalFiles } = JSON.parse(item.response);
+        const { changes, zipData } = JSON.parse(item.response);
         const zipBlob = new Blob([Buffer.from(zipData, 'base64')], { type: 'application/zip' });
         const downloadUrl = URL.createObjectURL(zipBlob);
         
@@ -389,9 +405,8 @@ export default function Home() {
           type: 'code'
         });
 
-        // Restore original files if available
-        if (originalFiles) {
-          await restoreFilesFromHistory(originalFiles);
+        if (item.originalFiles) {
+          await restoreFilesFromHistory(item.originalFiles);
         }
         break;
 
@@ -400,14 +415,6 @@ export default function Home() {
           message: item.response,
           type: 'text'
         });
-        
-        // Restore files if they were part of the analysis
-        if (item.files) {
-          await restoreFilesFromHistory(item.files);
-        }
-        break;
-
-      default:
         break;
     }
   };
