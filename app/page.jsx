@@ -917,7 +917,7 @@ export default function Home() {
                           <div className="space-y-4 w-full">
                             {fileChanges.map((change, index) => (
                               <div key={index} className="border rounded p-4 w-full">
-                                <div className="flex justify-between items-center">
+                                <div className="flex justify-start items-center">
                                   <h3 className="font-medium flex items-center gap-2 min-w-0">
                                     <span className={`flex-shrink-0 w-2 h-2 rounded-full ${
                                       change.type === 'modified' ? 'bg-yellow-400' : 'bg-gray-400'
