@@ -17,11 +17,6 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 });
 
-// Tambahkan ini di awal file
-const HISTORY_API_URL = process.env.NEXT_PUBLIC_BASE_URL 
-  ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/history`
-  : 'http://localhost:3000/api/history';
-
 export async function POST(request) {
   try {
     // Validate API key
@@ -123,11 +118,10 @@ export async function POST(request) {
         ]
       });
 
-      // Save to history with both files and knowledge files
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Instead of fetch, use direct file system or database call
+      // We'll create a separate function to handle history
+      try {
+        await saveToHistory({
           prompt,
           response: response.content[0].text,
           mode: 'text',
@@ -140,8 +134,11 @@ export async function POST(request) {
             content: file.type.startsWith('text/') ? await file.text() : null,
             type: file.type
           }))) : []
-        })
-      });
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+        // Continue execution even if history save fails
+      }
 
       return NextResponse.json({ 
         analysis: response.content[0].text 
@@ -203,11 +200,9 @@ export async function POST(request) {
       // Generate tree structure
       const tree = generateTreeStructure(files);
 
-      // Save to history
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Replace fetch with direct history save
+      try {
+        await saveToHistory({
           prompt,
           response: output,
           mode: 'create',
@@ -216,8 +211,10 @@ export async function POST(request) {
             content: file.type.startsWith('text/') ? await file.text() : null,
             type: file.type
           }))) : []
-        })
-      });
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+      }
 
       return NextResponse.json({
         message: "Project created successfully!",
@@ -307,14 +304,14 @@ export async function POST(request) {
     }
 
     // Save to history
-    await fetch(HISTORY_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await saveToHistory({
         prompt: prompt,
         response: response.content[0].text
-      })
-    });
+      });
+    } catch (historyError) {
+      console.error('Failed to save to history:', historyError);
+    }
 
     // Validate AI response
     if (!response?.content?.[0]?.text) {
@@ -359,11 +356,9 @@ export async function POST(request) {
         }
       });
 
-      // Save to history
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Replace fetch with direct history save
+      try {
+        await saveToHistory({
           prompt,
           response: JSON.stringify({
             changes,
@@ -374,8 +369,10 @@ export async function POST(request) {
             name: file.name,
             content: await file.text()
           })))
-        })
-      });
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+      }
 
       // Return both changes and zipData in one JSON response
       return NextResponse.json({ 
@@ -400,6 +397,27 @@ export async function POST(request) {
       },
       { status: 500 }
     );
+  }
+}
+
+// Add this helper function in the same file
+async function saveToHistory(data) {
+  try {
+    const response = await fetch('http://localhost:3001/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        created_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`History API returned ${response.status}`);
+    }
+  } catch (error) {
+    console.error('History save error:', error);
+    throw error;
   }
 }
 
