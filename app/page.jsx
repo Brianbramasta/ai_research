@@ -65,35 +65,48 @@ export default function Home() {
     setBackgroundImage(randomImage);
   }, []);
 
-  const requestDirectoryPermission = async () => {
-    try {
-      const handle = await window.showDirectoryPicker({
-        mode: 'readwrite',
-      });
-      setDirectoryHandle(handle);
-      return handle;
-    } catch (error) {
-      console.error('Error requesting directory permission:', error);
-      return null;
+  const requestDirectoryAccess = async () => {
+    const confirmAccess = window.confirm(
+      "This application needs access to your project directory to enable direct file modifications. " +
+      "Would you like to grant directory access?\n\n" +
+      "• Click 'OK' to select your project directory\n" +
+      "• Click 'Cancel' to continue without file modification capability"
+    );
+
+    if (confirmAccess) {
+      try {
+        const handle = await window.showDirectoryPicker({
+          mode: 'readwrite',
+        });
+        setDirectoryHandle(handle);
+        return handle;
+      } catch (error) {
+        console.error('Error requesting directory permission:', error);
+        return null;
+      }
     }
+    return null;
   };
 
   const onDrop = useCallback(async (acceptedFiles) => {
-    // Request permission first
-    const handle = await requestDirectoryPermission();
+    // Request directory access first
+    const handle = await requestDirectoryAccess();
+    
     if (!handle) {
-      alert('Need directory permission to enable file modifications');
+      // Clear files if user denied access
+      setFiles([]);
+      setOriginalFiles(new Map());
+      alert('File modifications will not be available. You can still analyze the code but changes cannot be applied directly.');
       return;
     }
 
     const fileTree = acceptedFiles.map(file => {
-      const fileContent = file;
-      // Pastikan menggunakan webkitRelativePath untuk mendapatkan full path
       const filePath = file.webkitRelativePath || file.path || file.name;
-      setOriginalFiles(prev => new Map(prev).set(filePath, fileContent));
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      setOriginalFiles(prev => new Map(prev).set(normalizedPath, file));
       
       return {
-        path: filePath,
+        path: normalizedPath,
         name: file.name,
         content: file,
         type: file.type,
@@ -227,23 +240,44 @@ export default function Home() {
         throw new Error('No directory permission');
       }
 
-      // Navigate to file location and create/update file
-      const pathParts = change.file.split('/');
+      // Parse the file path
+      const normalizedPath = change.file.replace(/\\/g, '/');
+      const pathParts = normalizedPath.split('/');
       const fileName = pathParts.pop();
       let currentDir = directoryHandle;
 
-      // Create subdirectories if needed
-      for (const part of pathParts) {
-        if (part) {
-          currentDir = await currentDir.getDirectoryHandle(part, { create: true });
+      // Navigate through directory structure
+      for (const part of pathParts.filter(Boolean)) {
+        try {
+          // Try to get existing directory first
+          currentDir = await currentDir.getDirectoryHandle(part);
+        } catch (error) {
+          // If directory doesn't exist, create it
+          if (error.name === 'NotFoundError') {
+            currentDir = await currentDir.getDirectoryHandle(part, { create: true });
+          } else {
+            throw error;
+          }
         }
       }
 
-      // Create or update the file (renamed fileHandle to newFileHandle)
-      const newFileHandle = await currentDir.getFileHandle(fileName, { create: true });
-      const writable = await newFileHandle.createWritable();
-      await writable.write(change.content);
-      await writable.close();
+      try {
+        // Try to get existing file
+        const fileHandle = await currentDir.getFileHandle(fileName);
+        const writable = await fileHandle.createWritable();
+        await writable.write(change.content);
+        await writable.close();
+      } catch (error) {
+        if (error.name === 'NotFoundError') {
+          // File doesn't exist, create new one
+          const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(change.content);
+          await writable.close();
+        } else {
+          throw error;
+        }
+      }
 
       // Update UI state
       setFiles(prev => prev.map(f => 
