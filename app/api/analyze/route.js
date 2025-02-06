@@ -13,20 +13,8 @@ export const config = {
   },
 };
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
-
 export async function POST(request) {
   try {
-    // Validate API key
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'Server configuration error', details: 'API key not configured' },
-        { status: 500 }
-      );
-    }
-
     let formData;
     try {
       formData = await request.formData();
@@ -36,6 +24,19 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const apiKey = formData.get('apiKey');
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key is required' },
+        { status: 400 }
+      );
+    }
+
+    // Initialize Anthropic with the provided API key
+    const anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
 
     const mode = formData.get('mode');
     const prompt = formData.get('prompt');

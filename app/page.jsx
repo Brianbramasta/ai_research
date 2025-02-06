@@ -1,7 +1,7 @@
 "use client";
 
-// Add InfoIcon to imports
-import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2, ChevronRight, Plus, Minus, Info } from "lucide-react";
+// Add MoonIcon and SunIcon to imports
+import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2, ChevronRight, Plus, Minus, Info, Moon, Sun } from "lucide-react";
 
 import dynamic from 'next/dynamic';
 import { useState, useCallback, useEffect } from 'react'; // Update import
@@ -20,6 +20,7 @@ import { ScrollArea } from "../components/ui/scroll-area";
 import { Textarea } from "../components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"; // Add this import
 import { Label } from "../components/ui/label"; // Add this import
+// import { Input } from "../components/ui/input"; // Add this import
 
 // Dynamically import JSZip to avoid SSR issues
 const JSZip = dynamic(() => import('jszip'), { ssr: false });
@@ -34,6 +35,8 @@ const highlightCode = (code, language) => {
 };
 
 export default function Home() {
+  // Add theme state
+  const [theme, setTheme] = useState('light');
   const [files, setFiles] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [knowledge, setKnowledge] = useState('');
@@ -53,6 +56,35 @@ export default function Home() {
   const [backgroundImage, setBackgroundImage] = useState('');
   const [diffs, setDiffs] = useState({}); // Add diffs state
   const [showInstructions, setShowInstructions] = useState(false);
+  const [apiKey, setApiKey] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('anthropicApiKey') || '';
+    }
+    return '';
+  });
+
+  // Add handleApiKeyChange function
+  const handleApiKeyChange = (e) => {
+    const value = e.target.value;
+    setApiKey(value);
+    localStorage.setItem('anthropicApiKey', value);
+  };
+
+  // Add useEffect for theme
+  useEffect(() => {
+    // Check local storage or system preference
+    const savedTheme = localStorage.getItem('theme') || 
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    setTheme(savedTheme);
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  };
 
   // Add instructions modal component
   const InstructionsModal = () => (
@@ -242,6 +274,10 @@ export default function Home() {
 
   // Modify handleAnalyze to handle both modes
   const handleAnalyze = async () => {
+    if (!apiKey) {
+      alert('Please enter your Anthropic API key');
+      return;
+    }
     if (!prompt) {
       alert('Please enter a prompt');
       return;
@@ -267,6 +303,7 @@ export default function Home() {
       formData.append('prompt', prompt);
       formData.append('knowledge', knowledge);
       formData.append('mode', mode);
+      formData.append('apiKey', apiKey);
 
       const response = await fetch('/api/analyze', {
         method: 'POST',
@@ -731,49 +768,65 @@ export default function Home() {
 
   return (
     <div 
-      className="min-h-screen relative"
+      className="min-h-screen relative dark:bg-gray-900"
       style={{
-        backgroundImage: `url(${backgroundImage})`,
+        backgroundImage: theme === 'light' ? `url(${backgroundImage})` : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed'
       }}
     >
-      {/* Add overlay for better contrast */}
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm" />
+      {/* Modify overlay for dark mode */}
+      <div className="absolute inset-0 bg-white/60 backdrop-blur-sm dark:bg-gray-900/60" />
       
       {/* Wrap existing content in relative container */}
       <div className="relative container mx-auto p-8">
         {/* Update card backgrounds for better contrast */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-bold text-green-900">AI Project Analysis Tool</h1>
+            <h1 className="text-4xl font-bold text-green-900 dark:text-green-100">AI Project Analysis Tool</h1>
             <Button
               variant="ghost"
               size="sm"
-              className="rounded-full hover:bg-green-50"
+              className="rounded-full hover:bg-green-50 dark:hover:bg-green-900"
               onClick={() => setShowInstructions(true)}
             >
-              <Info className="h-5 w-5 text-green-700" />
+              <Info className="h-5 w-5 text-green-700 dark:text-green-300" />
             </Button>
           </div>
-          <Button
-            variant="outline"
-            className="border-green-600 text-green-700 hover:bg-green-50/80 bg-white/80"
-            onClick={() => {
-              setShowHistory(!showHistory);
-              if (!showHistory) fetchHistory();
-            }}
-          >
-            {showHistory ? 'Hide History' : 'Show History'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={toggleTheme}
+            >
+              {theme === 'light' ? (
+                <Moon className="h-5 w-5 text-green-700" />
+              ) : (
+                <Sun className="h-5 w-5 text-green-300" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="border-green-600 text-green-700 hover:bg-green-50/80 bg-white/80 
+                dark:border-green-400 dark:text-green-300 dark:bg-gray-800/80 dark:hover:bg-green-900/80"
+              onClick={() => {
+                setShowHistory(!showHistory);
+                if (!showHistory) fetchHistory();
+              }}
+            >
+              {showHistory ? 'Hide History' : 'Show History'}
+            </Button>
+          </div>
         </div>
 
         {/* Add Instructions Modal */}
         <InstructionsModal />
 
         {showHistory && (
-          <Card className="mb-8 bg-white/90 backdrop-blur border-green-100 shadow-lg">
+          <Card className="mb-8 bg-white/90 backdrop-blur border-green-100 shadow-lg
+            dark:bg-gray-800/90 dark:border-green-900">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="font-semibold">History</h3>
               <Button
@@ -805,193 +858,219 @@ export default function Home() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card className="p-6 bg-white/90 backdrop-blur shadow-lg border-green-100">
-            <h2 className="text-2xl font-semibold mb-4 text-green-800">Project Files</h2>
-            {mode !== 'create' && (
-              <>
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors duration-200 ${
-                    isDragActive ? 'border-green-500 bg-green-50' : 'border-green-200 hover:border-green-400'
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  <Upload className="mx-auto h-12 w-12 text-green-400" />
-                  <p className="mt-2 text-green-700">
-                    {isDragActive
-                      ? "Drop the project here ..."
-                      : "Drag & drop project folder here, or click to select"}
-                  </p>
-                </div>
-                
-                <ScrollArea className="h-40 mt-4 rounded-md border border-green-100 p-4 bg-white/50">
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between py-2">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-mono text-gray-900">
+          <Card className="p-6 bg-white/90 backdrop-blur shadow-lg border-green-100
+            dark:bg-gray-800/90 dark:border-green-900 dark:text-gray-100">
+            <h2 className="text-2xl font-semibold mb-4 text-green-800 dark:text-green-100">Project Files</h2>
+            
+            {/* Add API key input field */}
+                  <div className="mb-6">
+                    <Label htmlFor="apiKey" className="text-lg font-medium mb-2 text-green-800 dark:text-green-100">
+                    Anthropic API Key
+                    </Label>
+                    <div className="relative">
+                    <input
+                      id="apiKey"
+                      type="password"
+                      value={apiKey}
+                      onChange={handleApiKeyChange}
+                      placeholder="Enter your Anthropic API key"
+                      className="w-full p-2 rounded-md bg-white/70 border border-green-200 focus-visible:ring-green-400 focus-visible:ring-2 focus-visible:outline-none dark:bg-gray-700/70 dark:border-green-700 dark:focus-visible:ring-green-500"
+                    />
+                    {!apiKey && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red-500">
+                      Required
+                      </span>
+                    )}
+                    </div>
+                  </div>
+
+                  {mode !== 'create' && (
+                    <>
+                    <div
+                      {...getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors duration-200 bg-white/70 dark:bg-gray-700/70 ${
+                      isDragActive ? 'border-green-500 bg-green-50 dark:bg-green-900/30' : 'border-green-200 hover:border-green-400'
+                      }`}
+                    >
+                      <input {...getInputProps()} />
+                      <Upload className="mx-auto h-12 w-12 text-green-400" />
+                      <p className="mt-2 text-green-700 dark:text-green-300">
+                      {isDragActive
+                        ? "Drop the project here ..."
+                        : "Drag & drop project folder here, or click to select"}
+                      </p>
+                    </div>
+                    
+                    <ScrollArea className="h-40 mt-4 rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                      {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between py-2">
+                        <div className="flex flex-col">
+                        <span className="text-sm font-mono text-gray-900 dark:text-gray-100">
                           {formatPath(file.path)}
                         </span>
-                        <span className="text-xs text-gray-500">{file.type}</span>
-                      </div>
-                      <Button
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{file.type}</span>
+                        </div>
+                        <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setFiles(files.filter((_, i) => i !== index))}
-                      >
+                        >
                         <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </ScrollArea>
-              </>
-            )}
+                        </Button>
+                      </div>
+                      ))}
+                    </ScrollArea>
+                    </>
+                  )}
 
-            <div className="mt-6">
-              <h3 className="text-lg font-medium mb-2 text-green-800">Prompt</h3>
-              <Textarea
-                placeholder={mode === 'create' 
-                  ? "Describe the project you want to create..." 
-                  : "Describe the modifications needed..."
-                }
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                className="min-h-[100px] bg-white/70 border-green-200 focus-visible:ring-green-400"
-              />
-            </div>
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium mb-2 text-green-800 dark:text-green-100">Prompt</h3>
+                    <Textarea
+                    placeholder={mode === 'create' 
+                      ? "Describe the project you want to create..." 
+                      : "Describe the modifications needed..."
+                    }
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    className="min-h-[100px] bg-white/70 border-green-200 focus-visible:ring-green-400 dark:bg-gray-700/70 dark:border-green-700 dark:focus-visible:ring-green-500"
+                    />
+                  </div>
 
-            <div className="mt-6">
-              <h3 className="text-lg font-medium mb-2 text-green-800">Additional Context</h3>
-              <Textarea
-                placeholder={mode === 'create'
-                  ? "Provide additional requirements or context..."
-                  : "Provide additional context..."
-                }
-                value={knowledge}
-                onChange={(e) => setKnowledge(e.target.value)}
-                className="min-h-[100px] bg-white/70 border-green-200 focus-visible:ring-green-400"
-              />
-            </div>
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium mb-2 text-green-800 dark:text-green-100">Additional Context</h3>
+                    <Textarea
+                    placeholder={mode === 'create'
+                      ? "Provide additional requirements or context..."
+                      : "Provide additional context..."
+                    }
+                    value={knowledge}
+                    onChange={(e) => setKnowledge(e.target.value)}
+                    className="min-h-[100px] bg-white/70 border-green-200 focus-visible:ring-green-400 dark:bg-gray-700/70 dark:border-green-700 dark:focus-visible:ring-green-500"
+                    />
+                  </div>
 
-            <div className="mt-6">
-              <h3 className="text-lg font-medium mb-2 text-green-800">Project Knowledge Files</h3>
-              <div className="space-y-4">
-                <input
-                  type="file"
-                  multiple
-                  accept=".txt,.pdf,image/*"
-                  onChange={handleKnowledgeFileChange}
-                  className="hidden"
-                  id="knowledge-files"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => document.getElementById('knowledge-files').click()}
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Knowledge Files
-                </Button>
-                
-                <ScrollArea className="h-40 rounded-md border border-green-100 p-4 bg-white/50">
-                  {knowledgeFiles.map((kf, index) => (
-                    <div key={index} className="flex items-center justify-between py-2">
-                      <span className="text-sm font-mono">{kf.file.name}</span>
-                      <Button
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium mb-2 text-green-800 dark:text-green-100">Project Knowledge Files</h3>
+                    <div className="space-y-4">
+                    <input
+                      type="file"
+                      multiple
+                      accept=".txt,.pdf,image/*"
+                      onChange={handleKnowledgeFileChange}
+                      className="hidden"
+                      id="knowledge-files"
+                    />
+                    <Button
+                      variant="outline"
+                      className="bg-white/70 border-green-200 hover:bg-green-50 dark:bg-gray-700/70 dark:border-green-700 dark:hover:bg-green-900/30"
+                      onClick={() => document.getElementById('knowledge-files').click()}
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Knowledge Files
+                    </Button>
+                    
+                    <ScrollArea className="h-40 rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                      {knowledgeFiles.map((kf, index) => (
+                      <div key={index} className="flex items-center justify-between py-2">
+                        <span className="text-sm font-mono text-gray-900 dark:text-gray-100">{kf.file.name}</span>
+                        <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => setKnowledgeFiles(files => files.filter((_, i) => i !== index))}
-                      >
+                        >
                         Remove
-                      </Button>
-                    </div>
-                  ))}
-                </ScrollArea>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Label>Analysis Mode</Label>
-              <RadioGroup
-                defaultValue="code"
-                onValueChange={setMode}
-                className="flex gap-4 mt-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="code" id="code" />
-                  <Label htmlFor="code">Code Analysis</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="text" id="text" />
-                  <Label htmlFor="text">Text Analysis</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="create" id="create" />
-                  <Label htmlFor="create">Create Project</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <Button
-              className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white"
-              onClick={handleAnalyze}
-              disabled={loading || (mode === 'code' && files.length === 0)}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  {mode === 'create' ? 'Create Project' : 'Analyze and Modify'}
-                </>
-              )}
-            </Button>
-          </Card>
-
-          <Card 
-            className={`p-6 bg-white/90 backdrop-blur shadow-lg border-green-100 transition-all duration-300 ${
-              isFullscreen 
-                ? 'fixed inset-4 z-50 overflow-auto' 
-                : 'relative'
-            }`}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold text-green-800">Results</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-
-            <ScrollArea className="h-[600px] rounded-md border border-green-100 p-4 bg-white/50">
-              {loading ? (
-                <ResultSkeleton />
-              ) : result ? (
-                <div className="flex flex-col gap-4">
-                  {mode === 'create' && projectStructure ? (
-                    <div className="space-y-4">
-                      <div className="prose">
-                        <p>{result.message}</p>
+                        </Button>
                       </div>
-                      
-                      <Button
+                      ))}
+                    </ScrollArea>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <h3 className="text-lg font-medium mb-2 text-green-800 dark:text-green-100">Analysis Mode</h3>
+                    <RadioGroup
+                    defaultValue="code"
+                    onValueChange={setMode}
+                    className="flex gap-4 mt-2"
+                    >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="code" id="code" />
+                      <Label htmlFor="code">Code Analysis</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="text" id="text" />
+                      <Label htmlFor="text">Text Analysis</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="create" id="create" />
+                      <Label htmlFor="create">Create Project</Label>
+                    </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Button
+                    className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={handleAnalyze}
+                    disabled={loading || (mode === 'code' && files.length === 0)}
+                  >
+                    {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                    ) : (
+                    <>
+                      <Wand2 className="mr-2 h-4 w-4" />
+                      {mode === 'create' ? 'Create Project' : 'Analyze and Modify'}
+                    </>
+                    )}
+                  </Button>
+                  </Card>
+
+                  <Card 
+                  className={`p-6 bg-white/90 backdrop-blur shadow-lg border-green-200 dark:bg-gray-800/90 dark:border-green-700 dark:text-gray-100
+                    transition-all duration-300 ${
+                    isFullscreen 
+                      ? 'fixed inset-4 z-50 overflow-auto' 
+                      : 'relative'
+                  }`}
+                  >
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-semibold text-green-800 dark:text-green-100">Results</h2>
+                    <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                    >
+                    {isFullscreen ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                    </Button>
+                  </div>
+
+                  <ScrollArea className="h-[600px] rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                    {loading ? (
+                    <ResultSkeleton />
+                    ) : result ? (
+                    <div className="flex flex-col gap-4">
+                      {mode === 'create' && projectStructure ? (
+                      <div className="space-y-4">
+                        <div className="prose">
+                        <p>{result.message}</p>
+                        </div>
+                        
+                        <Button
                         variant="outline"
                         onClick={handleShowFullCode}
-                        className="w-full"
-                      >
+                        className="w-full bg-white/70 border-green-200 hover:bg-green-50 dark:bg-gray-700/70 dark:border-green-700 dark:hover:bg-green-900/30"
+                        >
                         <Code className="mr-2 h-4 w-4" />
                         {showFullCode ? 'Hide Full Code' : 'See Full Code'}
-                      </Button>
+                        </Button>
 
-                      <ScrollArea className="w-full" orientation="horizontal">
+                        <ScrollArea className="w-full" orientation="horizontal">
                         <div className="min-w-max">
                           {/* Content inside horizontal scroll */}
                           {showFullCode && (
