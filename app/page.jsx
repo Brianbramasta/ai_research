@@ -1,5 +1,8 @@
 "use client";
 
+// Add InfoIcon to imports
+import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2, ChevronRight, Plus, Minus, Info } from "lucide-react";
+
 import dynamic from 'next/dynamic';
 import { useState, useCallback, useEffect } from 'react'; // Update import
 import { useDropzone } from 'react-dropzone';
@@ -15,7 +18,6 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Textarea } from "../components/ui/textarea";
-import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2, ChevronRight, Plus, Minus } from "lucide-react"; // Add new icons
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"; // Add this import
 import { Label } from "../components/ui/label"; // Add this import
 
@@ -50,6 +52,98 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState('');
   const [diffs, setDiffs] = useState({}); // Add diffs state
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  // Add instructions modal component
+  const InstructionsModal = () => (
+    <div className={`fixed inset-0 z-50 bg-white/95 backdrop-blur-sm overflow-auto transition-all duration-300 ${
+      showInstructions ? 'opacity-100' : 'opacity-0 pointer-events-none'
+    }`}>
+      <div className="container mx-auto p-8">
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-3xl font-bold text-green-900">How to Use AI Project Analysis Tool</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowInstructions(false)}
+          >
+            <X className="h-6 w-6" />
+          </Button>
+        </div>
+
+        <div className="prose prose-green max-w-none">
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">1. Select Analysis Mode</h3>
+            <ul className="space-y-4">
+              <li>
+                <strong className="text-green-700">Code Analysis:</strong> Analyzes and modifies existing code based on your requirements.
+              </li>
+              <li>
+                <strong className="text-green-700">Text Analysis:</strong> Provides detailed analysis of your project files without modifications.
+              </li>
+              <li>
+                <strong className="text-green-700">Create Project:</strong> Generates a new project structure based on your specifications.
+              </li>
+            </ul>
+          </section>
+
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">2. Upload Your Project</h3>
+            <ul className="space-y-4">
+              <li>Drag and drop your project folder or click to select files</li>
+              <li>The system will maintain the original folder structure</li>
+              <li>You'll be asked for directory access permission to enable file modifications</li>
+              <li>Without permission, you can still analyze but can't apply changes directly</li>
+            </ul>
+          </section>
+
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">3. Write Your Requirements</h3>
+            <ul className="space-y-4">
+              <li>
+                <strong className="text-green-700">Prompt:</strong> Describe what changes or analysis you need
+              </li>
+              <li>
+                <strong className="text-green-700">Additional Context:</strong> Provide any extra information or requirements
+              </li>
+              <li>
+                <strong className="text-green-700">Knowledge Files:</strong> Upload additional reference materials (optional)
+              </li>
+            </ul>
+          </section>
+
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">4. Review and Apply Changes</h3>
+            <ul className="space-y-4">
+              <li>View diff comparisons of file changes</li>
+              <li>Apply or reject changes individually</li>
+              <li>Use the fullscreen button to expand the results view</li>
+              <li>Download modified files as ZIP or apply changes directly</li>
+            </ul>
+          </section>
+
+          <section className="mb-8">
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">5. History and Project Management</h3>
+            <ul className="space-y-4">
+              <li>Access previous analyses and modifications</li>
+              <li>Restore previous project states</li>
+              <li>Download or save modified projects to your filesystem</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 className="text-2xl font-semibold text-green-800 mb-4">Tips</h3>
+            <ul className="space-y-4">
+              <li>Be specific in your prompts for better results</li>
+              <li>Review changes carefully before applying them</li>
+              <li>Use knowledge files to provide context for complex requirements</li>
+              <li>Save important changes to history for future reference</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
 
   // Add this useEffect for random background
   useEffect(() => {
@@ -652,7 +746,17 @@ export default function Home() {
       <div className="relative container mx-auto p-8">
         {/* Update card backgrounds for better contrast */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-green-900">AI Project Analysis Tool</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-bold text-green-900">AI Project Analysis Tool</h1>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-full hover:bg-green-50"
+              onClick={() => setShowInstructions(true)}
+            >
+              <Info className="h-5 w-5 text-green-700" />
+            </Button>
+          </div>
           <Button
             variant="outline"
             className="border-green-600 text-green-700 hover:bg-green-50/80 bg-white/80"
@@ -664,6 +768,9 @@ export default function Home() {
             {showHistory ? 'Hide History' : 'Show History'}
           </Button>
         </div>
+
+        {/* Add Instructions Modal */}
+        <InstructionsModal />
 
         {showHistory && (
           <Card className="mb-8 bg-white/90 backdrop-blur border-green-100 shadow-lg">
