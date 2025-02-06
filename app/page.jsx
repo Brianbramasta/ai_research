@@ -10,11 +10,12 @@ import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-jsx';
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-css';
+import * as Diff from 'diff'; // Add this import
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Textarea } from "../components/ui/textarea";
-import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2 } from "lucide-react"; // Add new icons
+import { Loader2, Upload, Wand2, Download, Check, X, Save, Code, Maximize2, Minimize2, FileText, Code as CodeIcon, PlusCircle, Trash2, ChevronRight, Plus, Minus } from "lucide-react"; // Add new icons
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"; // Add this import
 import { Label } from "../components/ui/label"; // Add this import
 
@@ -48,6 +49,7 @@ export default function Home() {
   const [showFullCode, setShowFullCode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState('');
+  const [diffs, setDiffs] = useState({}); // Add diffs state
 
   // Add this useEffect for random background
   useEffect(() => {
@@ -177,8 +179,21 @@ export default function Home() {
         const zipBlob = new Blob([responseData.zipData], { type: 'application/zip' });
         const downloadUrl = URL.createObjectURL(zipBlob);
         
+        // Calculate diffs for modified files
+        const newDiffs = {};
+        for (const change of responseData.changes) {
+          if (change.type === 'modified') {
+            const original = originalFiles.get(change.file);
+            if (original) {
+              const originalContent = await original.text();
+              newDiffs[change.file] = Diff.diffLines(originalContent, change.content);
+            }
+          }
+        }
+        
         setModifiedFiles(downloadUrl);
         setFileChanges(responseData.changes);
+        setDiffs(newDiffs);
         setResult({
           message: "Project successfully modified! Review changes below."
         });
@@ -561,6 +576,30 @@ export default function Home() {
       </Button>
     </div>
   );
+
+  const renderDiff = (filePath) => {
+    return (
+      <div className="diff-container">
+        {diffs[filePath].map((part, index) => {
+          const color = part.added ? 'bg-green-100' : part.removed ? 'bg-red-100' : 'bg-gray-50';
+          const icon = part.added ? <Plus className="h-3 w-3 text-green-600" /> : 
+            part.removed ? <Minus className="h-3 w-3 text-red-600" /> : 
+            <ChevronRight className="h-3 w-3 text-gray-400" />;
+          
+          return (
+            <div key={index} className={`${color} flex items-start p-1`}>
+              <span className="mr-2 mt-1">{icon}</span>
+              <code className={color}>
+                {part.value.split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </code>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div 
@@ -949,17 +988,24 @@ export default function Home() {
                                 </div>
                                 {change.type === 'modified' && (
                                   <div className="relative w-full mt-2 overflow-x-auto">
-                                    <pre className="p-2 bg-gray-50 rounded text-sm">
-                                      <code 
-                                        className={`language-${change.file.split('.').pop()}`}
-                                        dangerouslySetInnerHTML={{
-                                          __html: highlightCode(
-                                            change.content,
-                                            change.file.split('.').pop()
-                                          )
-                                        }}
-                                      />
-                                    </pre>
+                                    <div className="border rounded">
+                                      <div className="bg-gray-50 p-2 text-sm font-medium border-b">
+                                        Diff Preview
+                                      </div>
+                                      <pre className="p-2 text-sm">
+                                        {diffs[change.file] ? renderDiff(change.file) : (
+                                          <code
+                                            className={`language-${change.file.split('.').pop()}`}
+                                            dangerouslySetInnerHTML={{
+                                              __html: highlightCode(
+                                                change.content,
+                                                change.file.split('.').pop()
+                                              )
+                                            }}
+                                          />
+                                        )}
+                                      </pre>
+                                    </div>
                                   </div>
                                 )}
                               </div>

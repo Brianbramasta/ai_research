@@ -60,3 +60,18 @@ body {
   background: white;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
 }
+
+.diff-container code {
+  font-family: Monaco, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  width: 100%;
+}
+
+.diff-container .bg-green-100 {
+  background-color: #dcfce7;
+}
+
+.diff-container .bg-red-100 {
+  background-color: #fee2e2;
+}

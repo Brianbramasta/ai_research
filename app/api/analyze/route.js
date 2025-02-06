@@ -242,7 +242,8 @@ export async function POST(request) {
         const content = await file.text();
         return {
           path: file.name,
-          content: content || ''
+          content: content || '',
+          originalContent: content || ''
         };
       }));
     } catch (error) {
@@ -328,9 +329,14 @@ export async function POST(request) {
     while ((match = fileRegex.exec(output)) !== null) {
       const filePath = match[1];
       const fileContent = match[2].trim();
+      
+      // Find the original file content from fileTree
+      const originalFile = fileTree.find(f => f.path === filePath);
+      
       changes.push({
         file: filePath,
         content: fileContent,
+        originalContent: originalFile ? originalFile.originalContent : '',
         type: 'modified'
       });
     }
