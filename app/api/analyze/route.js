@@ -13,25 +13,8 @@ export const config = {
   },
 };
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
-
-// Tambahkan ini di awal file
-const HISTORY_API_URL = process.env.NEXT_PUBLIC_BASE_URL 
-  ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/history`
-  : 'http://localhost:3000/api/history';
-
 export async function POST(request) {
   try {
-    // Validate API key
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'Server configuration error', details: 'API key not configured' },
-        { status: 500 }
-      );
-    }
-
     let formData;
     try {
       formData = await request.formData();
@@ -41,6 +24,19 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const apiKey = formData.get('apiKey');
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key is required' },
+        { status: 400 }
+      );
+    }
+
+    // Initialize Anthropic with the provided API key
+    const anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
 
     const mode = formData.get('mode');
     const prompt = formData.get('prompt');
@@ -123,11 +119,10 @@ export async function POST(request) {
         ]
       });
 
-      // Save to history with both files and knowledge files
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Instead of fetch, use direct file system or database call
+      // We'll create a separate function to handle history
+      try {
+        await saveToHistory({
           prompt,
           response: response.content[0].text,
           mode: 'text',
@@ -140,8 +135,11 @@ export async function POST(request) {
             content: file.type.startsWith('text/') ? await file.text() : null,
             type: file.type
           }))) : []
-        })
-      });
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+        // Continue execution even if history save fails
+      }
 
       return NextResponse.json({ 
         analysis: response.content[0].text 
@@ -149,6 +147,19 @@ export async function POST(request) {
     }
 
     if (mode === 'create') {
+      // Process knowledge files first
+      let projectKnowledge = '';
+      if (knowledgeFiles && knowledgeFiles.length > 0) {
+        projectKnowledge = await Promise.all(knowledgeFiles.map(async (file) => {
+          if (file.type.startsWith('text/')) {
+            const content = await file.text();
+            return `Knowledge File: ${file.name}\n${content}\n---\n`;
+          }
+          return `Knowledge File: ${file.name} (Binary file)\n---\n`;
+        }));
+        projectKnowledge = projectKnowledge.join('\n');
+      }
+
       const response = await anthropic.messages.create({
         model: 'claude-3-opus-20240229',
         max_tokens: 4000,
@@ -159,6 +170,9 @@ export async function POST(request) {
             
             Project Description: ${prompt}
             Additional Context: ${knowledge}
+
+            Project Knowledge Files:
+            ${projectKnowledge}
             
             Please provide a complete project structure with all necessary files and their contents.
             Use this format for each file:
@@ -187,16 +201,21 @@ export async function POST(request) {
       // Generate tree structure
       const tree = generateTreeStructure(files);
 
-      // Save to history
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Replace fetch with direct history save
+      try {
+        await saveToHistory({
           prompt,
           response: output,
-          mode: 'create'
-        })
-      });
+          mode: 'create',
+          knowledgeFiles: knowledgeFiles.length > 0 ? await Promise.all(knowledgeFiles.map(async file => ({
+            name: file.name,
+            content: file.type.startsWith('text/') ? await file.text() : null,
+            type: file.type
+          }))) : []
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+      }
 
       return NextResponse.json({
         message: "Project created successfully!",
@@ -224,7 +243,8 @@ export async function POST(request) {
         const content = await file.text();
         return {
           path: file.name,
-          content: content || ''
+          content: content || '',
+          originalContent: content || ''
         };
       }));
     } catch (error) {
@@ -259,9 +279,10 @@ export async function POST(request) {
     file content here
     === END FILE ===`;
 
-    // Enhanced AI error handling
+    // Enhanced AI error handling - Simpan response dalam variabel
+    let response;
     try {
-      const response = await anthropic.messages.create({
+      response = await anthropic.messages.create({
         model: 'claude-3-opus-20240229',
         max_tokens: 4000,
         system: systemPrompt, // Move system prompt to top-level parameter
@@ -285,14 +306,14 @@ export async function POST(request) {
     }
 
     // Save to history
-    await fetch(HISTORY_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      await saveToHistory({
         prompt: prompt,
         response: response.content[0].text
-      })
-    });
+      });
+    } catch (historyError) {
+      console.error('Failed to save to history:', historyError);
+    }
 
     // Validate AI response
     if (!response?.content?.[0]?.text) {
@@ -309,9 +330,14 @@ export async function POST(request) {
     while ((match = fileRegex.exec(output)) !== null) {
       const filePath = match[1];
       const fileContent = match[2].trim();
+      
+      // Find the original file content from fileTree
+      const originalFile = fileTree.find(f => f.path === filePath);
+      
       changes.push({
         file: filePath,
         content: fileContent,
+        originalContent: originalFile ? originalFile.originalContent : '',
         type: 'modified'
       });
     }
@@ -337,11 +363,9 @@ export async function POST(request) {
         }
       });
 
-      // Save to history
-      await fetch(HISTORY_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Replace fetch with direct history save
+      try {
+        await saveToHistory({
           prompt,
           response: JSON.stringify({
             changes,
@@ -352,8 +376,10 @@ export async function POST(request) {
             name: file.name,
             content: await file.text()
           })))
-        })
-      });
+        });
+      } catch (historyError) {
+        console.error('Failed to save to history:', historyError);
+      }
 
       // Return both changes and zipData in one JSON response
       return NextResponse.json({ 
@@ -378,6 +404,27 @@ export async function POST(request) {
       },
       { status: 500 }
     );
+  }
+}
+
+// Add this helper function in the same file
+async function saveToHistory(data) {
+  try {
+    const response = await fetch('http://localhost:3001/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        created_at: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`History API returned ${response.status}`);
+    }
+  } catch (error) {
+    console.error('History save error:', error);
+    throw error;
   }
 }
 
