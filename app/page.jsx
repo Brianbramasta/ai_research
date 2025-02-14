@@ -366,6 +366,14 @@ export default function Home() {
   };
 
   const handleConfirmChange = async (change) => {
+    const confirmResult = window.confirm(
+      `Are you sure you want to apply changes to ${change.file}?\nThis action cannot be undone.`
+    );
+
+    if (!confirmResult) {
+      return;
+    }
+
     try {
       if (!directoryHandle) {
         throw new Error('No directory permission');
@@ -428,6 +436,14 @@ export default function Home() {
   };
 
   const handleRejectChange = (change) => {
+    const confirmResult = window.confirm(
+      `Are you sure you want to reject changes to ${change.file}?`
+    );
+
+    if (!confirmResult) {
+      return;
+    }
+
     setFileChanges(prev => prev.filter(c => c.file !== change.file));
   };
 
@@ -745,6 +761,11 @@ export default function Home() {
   const renderDiff = (filePath) => {
     return (
       <div className="diff-container">
+        <div className="text-sm text-gray-600 mb-2">
+          {/* Add location description */}
+          <strong>Location: </strong>
+          {diffs[filePath].description || 'File modification'}
+        </div>
         {diffs[filePath].map((part, index) => {
           const color = part.added ? 'bg-green-100' : part.removed ? 'bg-red-100' : 'bg-gray-50';
           const icon = part.added ? <Plus className="h-3 w-3 text-green-600" /> : 

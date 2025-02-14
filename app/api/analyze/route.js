@@ -79,7 +79,7 @@ export async function POST(request) {
       }
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
+        model: 'claude-3-sonnet-20240229',
         max_tokens: 4000,
         messages: [
           {
@@ -161,7 +161,7 @@ export async function POST(request) {
       }
 
       const response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
+        model: 'claude-3-sonnet-20240229',
         max_tokens: 4000,
         messages: [
           {
@@ -235,17 +235,44 @@ export async function POST(request) {
 
     // Process files with validation and store result in fileTree variable
     let fileTree;
+    let combinedFileContent = '';
     try {
+      // Tambahkan logging untuk debug
+      console.log('Files received:', files);
+      console.log('File content:', combinedFileContent);
+
+      // Dalam fungsi POST, setelah menerima files
+      console.log('Initial files:', files.map(f => ({
+        name: f.name,
+        type: f.type,
+        size: f.size
+      })));
+
+      // Perbaiki proses pembacaan file
       fileTree = await Promise.all(files.map(async (file) => {
         if (!file || !file.name) {
           throw new Error('Invalid file object');
         }
-        const content = await file.text();
-        return {
-          path: file.name,
-          content: content || '',
-          originalContent: content || ''
-        };
+        let content;
+        try {
+          content = await file.text();
+          console.log(`File ${file.name} content:`, content.substring(0, 100));
+          
+          // Normalize path
+          const normalizedPath = file.name.replace(/\\/g, '/');
+          
+          // Add to combined content immediately
+          combinedFileContent += `File: ${normalizedPath}\n${content}\n---\n`;
+          
+          return {
+            path: normalizedPath,
+            content,
+            originalContent: content
+          };
+        } catch (error) {
+          console.error(`Error reading file ${file.name}:`, error);
+          throw error;
+        }
       }));
     } catch (error) {
       return NextResponse.json(
@@ -264,32 +291,48 @@ export async function POST(request) {
     }));
 
     // Generate system prompt
-    const systemPrompt = `You are an AI code assistant. Analyze and modify the following project based on these requirements:
-    User Prompt: ${prompt}
-    Additional Context: ${knowledge}
+    const systemPrompt = `You are an AI code assistant. Analyze and modify the following project files. Your response should:
+1. Identify appropriate locations for code changes
+2. Provide modified code with clear indicators of where changes should be made
+3. Use the following format for each change:
+=== START LOCATION ===
+{describe where the change should be made, e.g., "after the imports", "inside the handleSubmit function"}
+=== END LOCATION ===
+=== START CODE ===
+{your code changes}
+=== END CODE ===
 
-    Project Knowledge Files:
-    ${knowledgeContent.join('\n')}
+Project Requirements:
+${prompt}
 
-    Project Structure:
-    ${fileTree.map(f => f.path).join('\n')}
-
-    Provide ONLY the modified file contents in this EXACT format:
-    === START FILE: path/filename.ext ===
-    file content here
-    === END FILE ===`;
+Additional Context:
+${knowledge}`;
 
     // Enhanced AI error handling - Simpan response dalam variabel
     let response;
     try {
+      // Perbaiki format prompt untuk AI
+      const aiPrompt = `Modify the following files according to the requirements.
+Requirements: ${prompt}
+
+Files to modify:
+${combinedFileContent}
+
+Please provide changes in this format:
+=== START FILE: filename.ext ===
+entire file content with changes
+=== END FILE ===
+
+For each file you modify, include the complete file content with your changes.`;
+
+      // Update AI call
       response = await anthropic.messages.create({
-        model: 'claude-3-opus-20240229',
+        model: 'claude-3-sonnet-20240229',
         max_tokens: 4000,
-        system: systemPrompt, // Move system prompt to top-level parameter
         messages: [
-          { 
-            role: 'user', 
-            content: "Please analyze and modify the project according to the provided specifications." 
+          {
+            role: 'user',
+            content: aiPrompt
           }
         ]
       });
@@ -322,8 +365,9 @@ export async function POST(request) {
 
     // Process AI response
     const output = response.content[0].text;
-    const changes = [];
-    
+    // Pass combinedFileContent instead of undefined fileContent
+    const changes = processAIResponse(output, combinedFileContent);
+
     // Parse modified files
     const fileRegex = /=== START FILE: (.*?) ===([\s\S]*?)=== END FILE ===/g;
     let match;
@@ -462,3 +506,63 @@ function formatTree(tree, level = 0) {
     return `${indent}${item.name}`;
   }).join('\n');
 }
+
+// Modifikasi processAIResponse untuk mengembalikan format yang konsisten
+const processAIResponse = (output, fileContent) => {
+  console.log('Processing AI output:', output);
+  const changes = [];
+  
+  // Extract file modifications
+  const fileRegex = /=== START FILE: (.*?) ===([\s\S]*?)=== END FILE ===/g;
+  let match;
+  
+  while ((match = fileRegex.exec(output)) !== null) {
+    const filePath = match[1].trim();
+    const newContent = match[2].trim();
+    
+    console.log(`Found modification for file: ${filePath}`);
+    
+    changes.push({
+      file: filePath,
+      content: newContent,
+      type: 'modified'
+    });
+  }
+
+  // Add unchanged files
+  const files = fileContent.split('---\n').filter(Boolean);
+  files.forEach(file => {
+    const [header] = file.split('\n');
+    const fileName = header.replace('File: ', '').trim();
+    
+    if (!changes.find(c => c.file === fileName)) {
+      changes.push({
+        file: fileName,
+        type: 'unchanged'
+      });
+    }
+  });
+
+  console.log('Final changes:', changes);
+  return changes;
+};
+
+const findInsertionPoint = (content, description) => {
+  const lines = content.split('\n');
+  
+  // Common patterns for location finding
+  if (description.includes('after imports')) {
+    return lines.findIndex(line => !line.trim().startsWith('import')) + 1;
+  }
+  
+  if (description.includes('inside function')) {
+    const funcName = description.match(/inside (\w+) function/)?.[1];
+    if (funcName) {
+      const funcIndex = lines.findIndex(line => line.includes(`function ${funcName}`));
+      return funcIndex + 1;
+    }
+  }
+  
+  // Default to end of file if no specific location found
+  return lines.length;
+};
