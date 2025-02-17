@@ -407,28 +407,54 @@ For each file you modify, include the complete file content with your changes.`;
         }
       });
 
-      // Replace fetch with direct history save
-      try {
-        await saveToHistory({
-          prompt,
-          response: JSON.stringify({
-            changes,
-            zipData: await zip.generateAsync({ type: "base64" })
-          }),
-          mode: 'code',
-          originalFiles: await Promise.all(files.map(async file => ({
-            name: file.name,
-            content: await file.text()
-          })))
-        });
-      } catch (historyError) {
-        console.error('Failed to save to history:', historyError);
-      }
+      // Tambahkan analisis AI untuk perubahan
+      const analysisPrompt = `Analyze these code changes and provide a clear summary:
+      ${changes.filter(c => c.type === 'modified').map(c => `
+      File: ${c.file}
+      Original:
+      ${c.originalContent}
+      
+      Modified:
+      ${c.content}
+      `).join('\n\n')}
 
-      // Return both changes and zipData in one JSON response
+      Provide your analysis in this exact format:
+      SUMMARY: One line overview of all changes
+      CHANGES:
+      - Detailed change description for each file
+      RECOMMENDATIONS:
+      - Action items based on the changes made`;
+
+      const analysisResponse = await anthropic.messages.create({
+        model: 'claude-3-sonnet-20240229',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: analysisPrompt }]
+      });
+
+      const analysis = analysisResponse.content[0].text;
+      const [summarySection, changesSection, recommendationsSection] = analysis.split('\n\n');
+
+      const technicalDetails = {
+        summary: summarySection.replace('SUMMARY:', '').trim(),
+        changes: changesSection.replace('CHANGES:', '')
+          .trim()
+          .split('\n')
+          .filter(line => line.trim())
+          .map(change => ({
+            type: 'change',
+            description: change
+          })),
+        recommendations: recommendationsSection.replace('RECOMMENDATIONS:', '')
+          .trim()
+          .split('\n')
+          .filter(line => line.trim())
+      };
+
+      // Return response with AI-generated analysis
       return NextResponse.json({ 
         changes,
-        zipData: await zip.generateAsync({ type: "blob" })
+        zipData: await zip.generateAsync({ type: "blob" }),
+        technicalDetails
       });
     }
 
