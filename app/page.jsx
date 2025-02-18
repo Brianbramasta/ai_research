@@ -215,31 +215,46 @@ export default function Home() {
   };
 
   const onDrop = useCallback(async (acceptedFiles) => {
-    // Request directory access first
-    const handle = await requestDirectoryAccess();
-    
-    if (!handle) {
-      // Clear files if user denied access
-      setFiles([]);
-      setOriginalFiles(new Map());
-      alert('File modifications will not be available. You can still analyze the code but changes cannot be applied directly.');
-      return;
-    }
-
-    const fileTree = acceptedFiles.map(file => {
-      const filePath = file.webkitRelativePath || file.path || file.name;
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      setOriginalFiles(prev => new Map(prev).set(normalizedPath, file));
+    try {
+      // Request directory access first
+      const handle = await requestDirectoryAccess();
       
-      return {
-        path: normalizedPath,
-        name: file.name,
-        content: file,
-        type: file.type,
-      };
-    });
-    
-    setFiles(prev => [...prev, ...fileTree]);
+      // Create a new array to store processed files
+      const processedFiles = [];
+      
+      for (const file of acceptedFiles) {
+        try {
+          // Create a copy of the file to avoid permission issues
+          const fileContent = await file.text();
+          const newFile = new File([fileContent], file.name, {
+            type: file.type
+          });
+          
+          const filePath = file.webkitRelativePath || file.path || file.name;
+          const normalizedPath = filePath.replace(/\\/g, '/');
+          
+          // Update originalFiles map with the new file copy
+          setOriginalFiles(prev => new Map(prev).set(normalizedPath, newFile));
+          
+          processedFiles.push({
+            path: normalizedPath,
+            name: file.name,
+            content: newFile,
+            type: file.type,
+          });
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          // Continue with other files even if one fails
+        }
+      }
+      
+      // Update files state with successfully processed files
+      setFiles(prev => [...prev, ...processedFiles]);
+      
+    } catch (error) {
+      console.error('Error in onDrop:', error);
+      alert('There was an error processing some files. Please try again.');
+    }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -371,68 +386,56 @@ export default function Home() {
       `Are you sure you want to apply changes to ${change.file}?\nThis action cannot be undone.`
     );
 
-    if (!confirmResult) {
-      return;
-    }
+    if (!confirmResult) return;
 
     try {
       if (!directoryHandle) {
         throw new Error('No directory permission');
       }
 
-      // Parse the file path
       const normalizedPath = change.file.replace(/\\/g, '/');
       const pathParts = normalizedPath.split('/');
       const fileName = pathParts.pop();
       let currentDir = directoryHandle;
 
+      // Create a new Blob with the content
+      const blob = new Blob([change.content], { type: 'text/plain' });
+      const newFile = new File([blob], fileName, { type: 'text/plain' });
+
       // Navigate through directory structure
       for (const part of pathParts.filter(Boolean)) {
         try {
-          // Try to get existing directory first
-          currentDir = await currentDir.getDirectoryHandle(part);
+          currentDir = await currentDir.getDirectoryHandle(part, { create: true });
         } catch (error) {
-          // If directory doesn't exist, create it
-          if (error.name === 'NotFoundError') {
-            currentDir = await currentDir.getDirectoryHandle(part, { create: true });
-          } else {
-            throw error;
-          }
+          console.error(`Error accessing/creating directory ${part}:`, error);
+          throw new Error(`Failed to access/create directory ${part}`);
         }
       }
 
       try {
-        // Try to get existing file
-        const fileHandle = await currentDir.getFileHandle(fileName);
+        const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable();
-        await writable.write(change.content);
+        await writable.write(newFile);
         await writable.close();
+
+        // Update the files state with the new content
+        setFiles(prev => prev.map(f => 
+          f.path === change.file 
+            ? { ...f, content: newFile }
+            : f
+        ));
+
+        // Remove from changes list
+        setFileChanges(prev => prev.filter(c => c.file !== change.file));
+
+        alert(`Successfully updated ${change.file}`);
       } catch (error) {
-        if (error.name === 'NotFoundError') {
-          // File doesn't exist, create new one
-          const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(change.content);
-          await writable.close();
-        } else {
-          throw error;
-        }
+        console.error('Error writing file:', error);
+        throw new Error(`Failed to write file ${fileName}`);
       }
-
-      // Update UI state
-      setFiles(prev => prev.map(f => 
-        f.path === change.file 
-          ? { ...f, content: new File([change.content], fileName) }
-          : f
-      ));
-
-      // Remove from changes list
-      setFileChanges(prev => prev.filter(c => c.file !== change.file));
-
-      alert(`Successfully updated ${change.file}`);
     } catch (error) {
       console.error('Error applying changes:', error);
-      alert(`Failed to apply changes to file: ${error.message}`);
+      alert(`Failed to apply changes: ${error.message}`);
     }
   };
 

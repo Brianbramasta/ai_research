@@ -19,8 +19,9 @@ export async function POST(request) {
     try {
       formData = await request.formData();
     } catch (error) {
+      console.error('Form data parsing error:', error);
       return NextResponse.json(
-        { error: 'Invalid request', details: 'Failed to parse form data' },
+        { error: 'Invalid request', details: error.message },
         { status: 400 }
       );
     }
@@ -51,6 +52,37 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    // Validate files before processing
+    if (files && files.length > 0) {
+      // Verify each file is readable
+      await Promise.all(files.map(async (file) => {
+        try {
+          // Try to read a small chunk to verify file is accessible
+          await file.slice(0, 1024).text();
+        } catch (error) {
+          throw new Error(`File ${file.name} is not readable: ${error.message}`);
+        }
+      }));
+    }
+
+    // Process files with additional error handling
+    const processFiles = async () => {
+      const fileTree = await Promise.all(files.map(async (file) => {
+        try {
+          const content = await file.text();
+          return {
+            path: file.name.replace(/\\/g, '/'),
+            content,
+            originalContent: content
+          };
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          throw new Error(`Failed to process file ${file.name}: ${error.message}`);
+        }
+      }));
+      return fileTree;
+    };
 
     if (mode === 'text') {
       // Process files if they exist
@@ -398,64 +430,72 @@ For each file you modify, include the complete file content with your changes.`;
 
     if (mode === 'code') {
       // Create new zip instance
-      const zip = new JSZip();
+      try {
+        const zip = new JSZip();
+        changes.forEach(change => {
+          if (change.type === 'modified') {
+            zip.file(change.file, change.content);
+          }
+        });
+        
+        const zipData = await zip.generateAsync({ type: "blob" });
+        
+        // Tambahkan analisis AI untuk perubahan
+        const analysisPrompt = `Analyze these code changes and provide a clear summary:
+        ${changes.filter(c => c.type === 'modified').map(c => `
+        File: ${c.file}
+        Original:
+        ${c.originalContent}
+        
+        Modified:
+        ${c.content}
+        `).join('\n\n')}
 
-      // Add modified files to zip
-      changes.forEach(change => {
-        if (change.type === 'modified') {
-          zip.file(change.file, change.content);
-        }
-      });
+        Provide your analysis in this exact format:
+        SUMMARY: One line overview of all changes
+        CHANGES:
+        - Detailed change description for each file
+        RECOMMENDATIONS:
+        - Action items based on the changes made`;
 
-      // Tambahkan analisis AI untuk perubahan
-      const analysisPrompt = `Analyze these code changes and provide a clear summary:
-      ${changes.filter(c => c.type === 'modified').map(c => `
-      File: ${c.file}
-      Original:
-      ${c.originalContent}
-      
-      Modified:
-      ${c.content}
-      `).join('\n\n')}
+        const analysisResponse = await anthropic.messages.create({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: analysisPrompt }]
+        });
 
-      Provide your analysis in this exact format:
-      SUMMARY: One line overview of all changes
-      CHANGES:
-      - Detailed change description for each file
-      RECOMMENDATIONS:
-      - Action items based on the changes made`;
+        const analysis = analysisResponse.content[0].text;
+        const [summarySection, changesSection, recommendationsSection] = analysis.split('\n\n');
 
-      const analysisResponse = await anthropic.messages.create({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: analysisPrompt }]
-      });
+        const technicalDetails = {
+          summary: summarySection.replace('SUMMARY:', '').trim(),
+          changes: changesSection.replace('CHANGES:', '')
+            .trim()
+            .split('\n')
+            .filter(line => line.trim())
+            .map(change => ({
+              type: 'change',
+              description: change
+            })),
+          recommendations: recommendationsSection.replace('RECOMMENDATIONS:', '')
+            .trim()
+            .split('\n')
+            .filter(line => line.trim())
+        };
 
-      const analysis = analysisResponse.content[0].text;
-      const [summarySection, changesSection, recommendationsSection] = analysis.split('\n\n');
-
-      const technicalDetails = {
-        summary: summarySection.replace('SUMMARY:', '').trim(),
-        changes: changesSection.replace('CHANGES:', '')
-          .trim()
-          .split('\n')
-          .filter(line => line.trim())
-          .map(change => ({
-            type: 'change',
-            description: change
-          })),
-        recommendations: recommendationsSection.replace('RECOMMENDATIONS:', '')
-          .trim()
-          .split('\n')
-          .filter(line => line.trim())
-      };
-
-      // Return response with AI-generated analysis
-      return NextResponse.json({ 
-        changes,
-        zipData: await zip.generateAsync({ type: "blob" }),
-        technicalDetails
-      });
+        // Return response with AI-generated analysis
+        return NextResponse.json({ 
+          changes,
+          zipData,
+          technicalDetails 
+        });
+      } catch (error) {
+        console.error('Error creating zip:', error);
+        return NextResponse.json(
+          { error: 'Failed to create zip file', details: error.message },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({ changes });
