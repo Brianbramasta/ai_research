@@ -16,10 +16,10 @@ import 'prismjs/components/prism-css';
 import * as Diff from 'diff'; // Add this import
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { ScrollArea } from "../components/ui/scroll-area";
 import { Textarea } from "../components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"; // Add this import
 import { Label } from "../components/ui/label"; // Add this import
+import { CustomScrollArea } from "../components/ui/custom-scroll-area"; // Add this import
 // import { Input } from "../components/ui/input"; // Add this import
 
 // Dynamically import JSZip to avoid SSR issues
@@ -339,7 +339,8 @@ export default function Home() {
         setFileChanges(responseData.changes);
         setDiffs(newDiffs);
         setResult({
-          message: "Project successfully modified! Review changes below."
+          message: "Project successfully modified! Review changes below.",
+          technicalDetails: responseData.technicalDetails // Tambahkan ini
         });
       } else {
         // Handle text mode response
@@ -366,6 +367,14 @@ export default function Home() {
   };
 
   const handleConfirmChange = async (change) => {
+    const confirmResult = window.confirm(
+      `Are you sure you want to apply changes to ${change.file}?\nThis action cannot be undone.`
+    );
+
+    if (!confirmResult) {
+      return;
+    }
+
     try {
       if (!directoryHandle) {
         throw new Error('No directory permission');
@@ -428,6 +437,14 @@ export default function Home() {
   };
 
   const handleRejectChange = (change) => {
+    const confirmResult = window.confirm(
+      `Are you sure you want to reject changes to ${change.file}?`
+    );
+
+    if (!confirmResult) {
+      return;
+    }
+
     setFileChanges(prev => prev.filter(c => c.file !== change.file));
   };
 
@@ -742,29 +759,36 @@ export default function Home() {
     </div>
   );
 
-  const renderDiff = (filePath) => {
-    return (
-      <div className="diff-container">
-        {diffs[filePath].map((part, index) => {
-          const color = part.added ? 'bg-green-100' : part.removed ? 'bg-red-100' : 'bg-gray-50';
-          const icon = part.added ? <Plus className="h-3 w-3 text-green-600" /> : 
-            part.removed ? <Minus className="h-3 w-3 text-red-600" /> : 
-            <ChevronRight className="h-3 w-3 text-gray-400" />;
-          
-          return (
-            <div key={index} className={`${color} flex items-start p-1`}>
-              <span className="mr-2 mt-1">{icon}</span>
-              <code className={color}>
-                {part.value.split('\n').map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
-              </code>
-            </div>
-          );
-        })}
+  // Ubah fungsi renderDiff
+const renderDiff = (filePath) => {
+  return (
+    <div className="w-full">
+      <div className="text-sm text-gray-600 mb-2">
+        <strong>Location: </strong>
+        {diffs[filePath].description || 'File modification'}
       </div>
-    );
-  };
+      <div className="max-h-[500px] overflow-auto border rounded-md">
+        <div className="min-w-max">
+          {diffs[filePath].map((part, index) => {
+            const color = part.added ? 'bg-green-100' : part.removed ? 'bg-red-100' : 'bg-gray-50';
+            const icon = part.added ? <Plus className="h-3 w-3 text-green-600" /> : 
+              part.removed ? <Minus className="h-3 w-3 text-red-600" /> : 
+              <ChevronRight className="h-3 w-3 text-gray-400" />;
+            
+            return (
+              <div key={index} className={`${color} flex items-start p-1`}>
+                <span className="mr-2 mt-1 flex-shrink-0">{icon}</span>
+                <pre className="overflow-x-auto font-mono text-sm">
+                  <code>{part.value}</code>
+                </pre>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
 
   return (
     <div 
@@ -842,7 +866,7 @@ export default function Home() {
                 Clear All
               </Button>
             </div>
-            <ScrollArea className="h-[300px] w-full rounded-md p-4">
+            <div className="h-[300px] overflow-auto w-full rounded-md p-4">
               <div className="space-y-2">
                 {history.map((item, index) => (
                   <HistoryItem
@@ -853,11 +877,11 @@ export default function Home() {
                   />
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-8">
           <Card className="p-6 bg-white/90 backdrop-blur shadow-lg border-green-100
             dark:bg-gray-800/90 dark:border-green-900 dark:text-gray-100">
             <h2 className="text-2xl font-semibold mb-4 text-green-800 dark:text-green-100">Project Files</h2>
@@ -901,7 +925,7 @@ export default function Home() {
                       </p>
                     </div>
                     
-                    <ScrollArea className="h-40 mt-4 rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                    <div className="h-40 mt-4 overflow-auto rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
                       {files.map((file, index) => (
                       <div key={index} className="flex items-center justify-between py-2">
                         <div className="flex flex-col">
@@ -919,7 +943,7 @@ export default function Home() {
                         </Button>
                       </div>
                       ))}
-                    </ScrollArea>
+                    </div>
                     </>
                   )}
 
@@ -969,7 +993,7 @@ export default function Home() {
                       Upload Knowledge Files
                     </Button>
                     
-                    <ScrollArea className="h-40 rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                    <div className="h-40 overflow-auto rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
                       {knowledgeFiles.map((kf, index) => (
                       <div key={index} className="flex items-center justify-between py-2">
                         <span className="text-sm font-mono text-gray-900 dark:text-gray-100">{kf.file.name}</span>
@@ -982,7 +1006,7 @@ export default function Home() {
                         </Button>
                       </div>
                       ))}
-                    </ScrollArea>
+                    </div>
                     </div>
                   </div>
 
@@ -1050,7 +1074,7 @@ export default function Home() {
                     </Button>
                   </div>
 
-                  <ScrollArea className="h-[600px] rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70 dark:border-green-700">
+                  <div className=" overflow-auto rounded-md border border-green-200 p-4 bg-white/70 dark:bg-gray-700/70">
                     {loading ? (
                     <ResultSkeleton />
                     ) : result ? (
@@ -1070,7 +1094,7 @@ export default function Home() {
                         {showFullCode ? 'Hide Full Code' : 'See Full Code'}
                         </Button>
 
-                        <ScrollArea className="w-full" orientation="horizontal">
+                        <div className="w-full overflow-x-auto">
                         <div className="min-w-max">
                           {/* Content inside horizontal scroll */}
                           {showFullCode && (
@@ -1098,7 +1122,7 @@ export default function Home() {
                             </div>
                           )}
                         </div>
-                      </ScrollArea>
+                      </div>
                       
                       <div className="border rounded p-4">
                         <h3 className="font-medium mb-2">Project Structure:</h3>
@@ -1170,7 +1194,7 @@ export default function Home() {
                       <div className="prose">
                         <p>{result.message}</p>
                       </div>
-                      <ScrollArea className="w-full" orientation="horizontal">
+                      <div className="w-full overflow-x-auto">
                         <div className="min-w-max">
                           {/* Content inside horizontal scroll */}
                           <div className="space-y-4 w-full">
@@ -1207,24 +1231,28 @@ export default function Home() {
                                   )}
                                 </div>
                                 {change.type === 'modified' && (
-                                  <div className="relative w-full mt-2 overflow-x-auto">
+                                  <div className="relative w-full mt-2">
                                     <div className="border rounded">
                                       <div className="bg-gray-50 p-2 text-sm font-medium border-b">
                                         Diff Preview
                                       </div>
-                                      <pre className="p-2 text-sm">
+                                      <div className="p-2">
                                         {diffs[change.file] ? renderDiff(change.file) : (
-                                          <code
-                                            className={`language-${change.file.split('.').pop()}`}
-                                            dangerouslySetInnerHTML={{
-                                              __html: highlightCode(
-                                                change.content,
-                                                change.file.split('.').pop()
-                                              )
-                                            }}
-                                          />
+                                          <div className="w-full overflow-auto">
+                                            <pre className="min-w-fit whitespace-pre font-mono text-sm">
+                                              <code
+                                                className={`language-${change.file.split('.').pop()}`}
+                                                dangerouslySetInnerHTML={{
+                                                  __html: highlightCode(
+                                                    change.content,
+                                                    change.file.split('.').pop()
+                                                  )
+                                                }}
+                                              />
+                                            </pre>
+                                          </div>
                                         )}
-                                      </pre>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -1232,8 +1260,45 @@ export default function Home() {
                             ))}
                           </div>
                         </div>
-                      </ScrollArea>
+                      </div>
                     </>
+                  )}
+                  {mode === 'code' && result?.technicalDetails && (
+                    <div className="mt-8 space-y-6 bg-green-50/50 dark:bg-green-900/20 p-6 rounded-lg border border-green-100 dark:border-green-800">
+                      <div className="max-h-[300px] overflow-auto border rounded-md p-4">
+                        <div className="min-w-max space-y-4">
+                          <h3 className="text-xl font-semibold text-green-800 dark:text-green-200">
+                            {result.technicalDetails.summary}
+                          </h3>
+                          
+                          <div className="space-y-2">
+                            {result.technicalDetails.changes.map((change, index) => (
+                              <div 
+                                key={index}
+                                className="flex items-start gap-2 text-gray-600 dark:text-gray-300"
+                              >
+                                <pre className="font-mono text-sm">
+                                  {change.description}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                
+                          <div className="space-y-2 mt-6">
+                            {result.technicalDetails.recommendations.map((rec, index) => (
+                              <div 
+                                key={index}
+                                className="text-gray-600 dark:text-gray-300"
+                              >
+                                <pre className="font-mono text-sm">
+                                  {rec}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -1241,7 +1306,7 @@ export default function Home() {
                   {result?.error || 'Results will appear here'}
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </Card>
         </div>
       </div>

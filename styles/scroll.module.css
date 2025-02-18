@@ -1,0 +1,19 @@
+.scrollContainer {
+  overflow: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollContainer::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollContainer::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.scrollContainer::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
