@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from 'react';
+import { FileExplorer } from "@/components/ui/file-explorer";
 import { Loader2, Send, Code, FolderTree, Settings, Search } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -57,7 +58,9 @@ export default function Editor() {
   };
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
+    <div className="flex h-screen">
+      <FileExplorer files={files} />
+      <div className={`flex-1 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
       <div className="container mx-auto p-4">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold">AI Code Editor</h1>
@@ -140,6 +143,7 @@ export default function Editor() {
           </Card>
         </div>
       </div>
+    </div>
     </div>
   );
 }
