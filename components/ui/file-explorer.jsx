@@ -1,9 +1,8 @@
-
 "use client";
 
-import { useState } from 'react';
-import { ChevronRight, ChevronDown, Folder, File, Code } from 'lucide-react';
-import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { ChevronRight, ChevronDown, Folder, File, Code } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 const FileTree = ({ files, level = 0 }) => {
   const [expandedFolders, setExpandedFolders] = useState(new Set());
@@ -20,8 +19,8 @@ const FileTree = ({ files, level = 0 }) => {
 
   const groupByFolder = (files) => {
     const tree = {};
-    files.forEach(file => {
-      const parts = file.path.split('/');
+    files.forEach((file) => {
+      const parts = file.path.split("/");
       let current = tree;
       parts.forEach((part, i) => {
         if (i === parts.length - 1) {
@@ -37,12 +36,12 @@ const FileTree = ({ files, level = 0 }) => {
     return tree;
   };
 
-  const renderTree = (tree, path = '', level = 0) => {
+  const renderTree = (tree, path = "", level = 0) => {
     const folders = tree.folders ? Object.entries(tree.folders) : [];
     const files = tree.files || [];
 
     return (
-      <div style={{ paddingLeft: level ? '1.5rem' : '0.5rem' }}>
+      <div style={{ paddingLeft: level ? "1.5rem" : "0.5rem" }}>
         {folders.map(([name, content]) => {
           const fullPath = path ? `${path}/${name}` : name;
           const isExpanded = expandedFolders.has(fullPath);
@@ -53,10 +52,14 @@ const FileTree = ({ files, level = 0 }) => {
                 onClick={() => toggleFolder(fullPath)}
                 className={cn(
                   "flex items-center gap-1 w-full p-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 rounded",
-                  "transition-colors duration-150"
+                  "transition-colors duration-150",
                 )}
               >
-                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
                 <Folder className="h-4 w-4 text-blue-500" />
                 <span>{name}</span>
               </button>
@@ -69,12 +72,12 @@ const FileTree = ({ files, level = 0 }) => {
             key={file.path}
             className={cn(
               "flex items-center gap-1 w-full p-1 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 rounded",
-              "cursor-pointer transition-colors duration-150"
+              "cursor-pointer transition-colors duration-150",
             )}
           >
             <span className="w-4" />
             <File className="h-4 w-4 text-gray-500" />
-            <span>{file.path.split('/').pop()}</span>
+            <span>{file.path.split("/").pop()}</span>
           </div>
         ))}
       </div>
